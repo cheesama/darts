@@ -74,8 +74,10 @@ def main():
   criterion = nn.CrossEntropyLoss()
   criterion = criterion.cuda()
 
-  model = Network(args.init_channels, CIFAR_CLASSES, args.layers, criterion)
-  model = model.cuda()
+  if torch.cuda.device_count() > 1:
+    model = nn.DataParallel(Network(args.init_channels, CIFAR_CLASSES, args.layers, criterion)).cuda()
+  else:
+    model = model.cuda()
 
   logging.info("param size = %fMB", utils.count_parameters_in_MB(model))
 
@@ -105,7 +107,10 @@ def main():
   scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer, float(args.epochs), eta_min=args.learning_rate_min)
 
-  architect = Architect(model, args)
+  if torch.cuda.device_count() > 1:
+    architect = Architect(model.module, args)
+  else:
+    architect = Architect(model, args)
 
   #add mlflow 
   mlflow_server = '172.23.147.124'
@@ -121,9 +126,14 @@ def main():
         lr = scheduler.get_lr()[0]
         logging.info('epoch %d lr %e', epoch, lr)
 
-        genotype = model.genotype()
-        #print(F.softmax(model.alphas_normal, dim=-1))
-        #print(F.softmax(model.alphas_reduce, dim=-1))
+        if torch.cuda.device_count() > 1:
+            genotype = model.module.genotype()
+            #print(F.softmax(model.module.alphas_normal, dim=-1))
+            #print(F.softmax(model.module.alphas_reduce, dim=-1))
+        else:
+            genotype = model.genotype()
+            #print(F.softmax(model.alphas_normal, dim=-1))
+            #print(F.softmax(model.alphas_reduce, dim=-1))
 
         logging.info('genotype = %s', genotype)
 
@@ -135,8 +145,12 @@ def main():
         valid_acc, valid_obj = infer(valid_queue, model, criterion)
         logging.info('valid_acc %f', valid_acc)
 
-        torch.save(model, os.path.join(args.save, 'model_weights.pkl'))
-        utils.save(model, os.path.join(args.save, 'weights.pt'))
+        if torch.cuda.device_count() > 1:
+            torch.save(model, os.path.join(args.save, 'model_weights.pkl'))
+            utils.save(model, os.path.join(args.save, 'weights.pt'))
+        else:
+            torch.save(model.module, os.path.join(args.save, 'model_weights.pkl'))
+            utils.save(model.module, os.path.join(args.save, 'weights.pt'))
 
         #mlflow.log_artifact('model', model)
 

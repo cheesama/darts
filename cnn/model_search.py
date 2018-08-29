@@ -19,8 +19,10 @@ class MixedOp(nn.Module):
       self._ops.append(op)
 
   def forward(self, x, weights):
-    return sum(w * op(x) for w, op in zip(weights, self._ops))
+    if x.device.index != weights.device.index:
+        weights = weights.cuda(x.device.index)
 
+    return sum(w * op(x) for w, op in zip(weights, self._ops))
 
 class Cell(nn.Module):
 
@@ -101,12 +103,15 @@ class Network(nn.Module):
 
   def forward(self, input):
     s0 = s1 = self.stem(input)
+
     for i, cell in enumerate(self.cells):
       if cell.reduction:
         weights = F.softmax(self.alphas_reduce, dim=-1)
       else:
         weights = F.softmax(self.alphas_normal, dim=-1)
+    
       s0, s1 = s1, cell(s0, s1, weights)
+
     out = self.global_pooling(s1)
     logits = self.classifier(out.view(out.size(0),-1))
     return logits
