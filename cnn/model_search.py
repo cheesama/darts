@@ -8,7 +8,6 @@ from genotypes import Genotype
 
 
 class MixedOp(nn.Module):
-
   def __init__(self, C, stride):
     super(MixedOp, self).__init__()
     self._ops = nn.ModuleList()
@@ -25,7 +24,6 @@ class MixedOp(nn.Module):
     return sum(w * op(x) for w, op in zip(weights, self._ops))
 
 class Cell(nn.Module):
-
   def __init__(self, steps, multiplier, C_prev_prev, C_prev, C, reduction, reduction_prev):
     super(Cell, self).__init__()
     self.reduction = reduction
@@ -59,9 +57,8 @@ class Cell(nn.Module):
 
     return torch.cat(states[-self._multiplier:], dim=1)
 
-
 class Network(nn.Module):
-  def __init__(self, C, num_classes, layers, criterion, steps=4, multiplier=4, stem_multiplier=3):
+  def __init__(self, C, num_classes, layers, criterion, steps=4, multiplier=4, stem_multiplier=3, gpu=0):
     super(Network, self).__init__()
     self._C = C
     self._num_classes = num_classes
@@ -69,6 +66,7 @@ class Network(nn.Module):
     self._criterion = criterion
     self._steps = steps
     self._multiplier = multiplier
+    self.gpu = gpu
 
     C_curr = stem_multiplier*C
     self.stem = nn.Sequential(
@@ -96,7 +94,7 @@ class Network(nn.Module):
     self._initialize_alphas()
 
   def new(self):
-    model_new = Network(self._C, self._num_classes, self._layers, self._criterion).cuda()
+    model_new = Network(self._C, self._num_classes, self._layers, self._criterion).cuda(self.gpu)
     for x, y in zip(model_new.arch_parameters(), self.arch_parameters()):
         x.data.copy_(y.data)
     return model_new
@@ -124,8 +122,8 @@ class Network(nn.Module):
     k = sum(1 for i in range(self._steps) for n in range(2+i))
     num_ops = len(PRIMITIVES)
 
-    self.alphas_normal = Variable(1e-3*torch.randn(k, num_ops).cuda(), requires_grad=True)
-    self.alphas_reduce = Variable(1e-3*torch.randn(k, num_ops).cuda(), requires_grad=True)
+    self.alphas_normal = Variable(1e-3*torch.randn(k, num_ops).cuda(self.gpu), requires_grad=True)
+    self.alphas_reduce = Variable(1e-3*torch.randn(k, num_ops).cuda(self.gpu), requires_grad=True)
     self._arch_parameters = [
       self.alphas_normal,
       self.alphas_reduce,
